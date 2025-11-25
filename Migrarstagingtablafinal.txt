@@ -1,0 +1,5 @@
+-- Migrar desde staging a la tabla final
+INSERT INTO telemetry_event (created_at, game_id, map_id, player_id, tic, pos_x, pos_y, pos_z)
+SELECT COALESCE("timestamp", now()),
+       game_id, map_id, player_id, tic, pos_x, pos_y, pos_z
+FROM staging_telemetry;

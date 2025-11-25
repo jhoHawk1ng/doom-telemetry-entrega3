@@ -1,0 +1,27 @@
+-- Vista materializada: segmentos de trayectoria
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_trajectory_segments AS
+WITH steps AS (
+  SELECT game_id, player_id, tic, created_at, pos_x, pos_y, pos_z,
+         LAG(pos_x) OVER (PARTITION BY game_id, player_id ORDER BY tic) AS px_prev,
+         LAG(pos_y) OVER (PARTITION BY game_id, player_id ORDER BY tic) AS py_prev,
+         LAG(pos_z) OVER (PARTITION BY game_id, player_id ORDER BY tic) AS pz_prev,
+         LAG(tic)   OVER (PARTITION BY game_id, player_id ORDER BY tic) AS tic_prev
+  FROM telemetry_event
+)
+SELECT game_id, player_id, tic, created_at, pos_x, pos_y, pos_z,
+       CASE WHEN px_prev IS NULL THEN 0
+            ELSE sqrt( power(pos_x - px_prev,2)
+                     + power(pos_y - py_prev,2)
+                     + power(pos_z - pz_prev,2) )
+       END AS step_distance,
+       CASE WHEN px_prev IS NULL THEN 0
+            ELSE sqrt( power(pos_x - px_prev,2)
+                     + power(pos_y - py_prev,2)
+                     + power(pos_z - pz_prev,2) ) / GREATEST(tic - COALESCE(tic_prev,tic),1)
+       END AS step_speed
+FROM steps;
+
+-- Índice para filtrar rápido por (game, player)
+CREATE INDEX IF NOT EXISTS idx_mv_game_player_tic
+  ON mv_trajectory_segments (game_id, player_id, tic);
+

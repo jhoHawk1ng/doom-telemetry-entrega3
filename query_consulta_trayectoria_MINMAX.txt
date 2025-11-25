@@ -1,0 +1,27 @@
+-- 3) Trayectoria mínima/máxima por jugador (distancia total por partida)
+WITH steps AS (
+  SELECT game_id, player_id, tic, pos_x, pos_y, pos_z,
+         LAG(pos_x) OVER (PARTITION BY game_id, player_id ORDER BY tic) AS px_prev,
+         LAG(pos_y) OVER (PARTITION BY game_id, player_id ORDER BY tic) AS py_prev,
+         LAG(pos_z) OVER (PARTITION BY game_id, player_id ORDER BY tic) AS pz_prev
+  FROM telemetry_event
+),
+per_game AS (
+  SELECT game_id, player_id,
+         SUM(
+           CASE WHEN px_prev IS NULL THEN 0
+                ELSE sqrt( power(pos_x - px_prev,2)
+                         + power(pos_y - py_prev,2)
+                         + power(pos_z - pz_prev,2) )
+           END
+         ) AS total_distance
+  FROM steps
+  GROUP BY game_id, player_id
+)
+SELECT player_id,
+       MIN(total_distance)::numeric(12,2) AS min_traj,
+       MAX(total_distance)::numeric(12,2) AS max_traj
+FROM per_game
+GROUP BY player_id
+ORDER BY max_traj DESC
+LIMIT 20;

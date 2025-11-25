@@ -1,0 +1,18 @@
+-- B) Hotspots: top celda por (game,map) en grilla 250
+CREATE OR REPLACE VIEW view_hotspots_250 AS
+WITH grid AS (
+  SELECT game_id, map_id,
+         FLOOR(pos_x/250.0)::int AS cell_x,
+         FLOOR(pos_y/250.0)::int AS cell_y,
+         COUNT(*) AS hits
+  FROM telemetry_event
+  GROUP BY game_id, map_id, FLOOR(pos_x/250.0), FLOOR(pos_y/250.0)
+),
+ranked AS (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY game_id, map_id ORDER BY hits DESC) AS rk
+  FROM grid
+)
+SELECT game_id, map_id, cell_x, cell_y, hits
+FROM ranked
+WHERE rk = 1
+ORDER BY hits DESC;

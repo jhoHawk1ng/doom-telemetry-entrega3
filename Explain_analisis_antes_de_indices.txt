@@ -1,0 +1,56 @@
+-- 1) Trayectoria por jugador
+EXPLAIN ANALYZE
+WITH steps AS (
+  SELECT game_id, player_id, tic, pos_x, pos_y, pos_z,
+         LAG(pos_x) OVER (PARTITION BY game_id, player_id ORDER BY tic) AS px_prev,
+         LAG(pos_y) OVER (PARTITION BY game_id, player_id ORDER BY tic) AS py_prev,
+         LAG(pos_z) OVER (PARTITION BY game_id, player_id ORDER BY tic) AS pz_prev
+  FROM telemetry_event
+),
+per_game AS (
+  SELECT game_id, player_id,
+         SUM(
+           CASE WHEN px_prev IS NULL THEN 0
+                ELSE sqrt( power(pos_x - px_prev,2)
+                         + power(pos_y - py_prev,2)
+                         + power(pos_z - pz_prev,2) )
+           END
+         ) AS total_distance
+  FROM steps
+  GROUP BY game_id, player_id
+)
+SELECT player_id,
+       MIN(total_distance)::numeric(12,2) AS min_traj,
+       MAX(total_distance)::numeric(12,2) AS max_traj
+FROM per_game
+GROUP BY player_id
+ORDER BY max_traj DESC
+LIMIT 20;
+
+-- 2) Heatmap (grid 250)
+EXPLAIN ANALYZE
+WITH grid AS (
+  SELECT game_id, map_id,
+         FLOOR(pos_x/250.0)::int AS cell_x,
+         FLOOR(pos_y/250.0)::int AS cell_y,
+         COUNT(*) AS hits
+  FROM telemetry_event
+  GROUP BY game_id, map_id, FLOOR(pos_x/250.0), FLOOR(pos_y/250.0)
+)
+SELECT *
+FROM grid
+ORDER BY hits DESC
+LIMIT 50;
+
+-- 3) Duración por mapa
+EXPLAIN ANALYZE
+WITH per_game AS (
+  SELECT game_id, map_id, (MAX(tic) - MIN(tic) + 1) AS duration_tics
+  FROM telemetry_event
+  GROUP BY game_id, map_id
+)
+SELECT map_id, AVG(duration_tics)::numeric(12,2) AS avg_duration_tics
+FROM per_game
+GROUP BY map_id
+ORDER BY avg_duration_tics DESC
+LIMIT 20;

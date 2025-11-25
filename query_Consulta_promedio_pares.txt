@@ -1,0 +1,21 @@
+-- 2) Proximidad promedio entre pares (ventana temporal ±1 tic)
+WITH pairs AS (
+  SELECT t1.game_id,
+         LEAST(t1.player_id, t2.player_id)  AS p_a,
+         GREATEST(t1.player_id, t2.player_id) AS p_b,
+         sqrt( power(t1.pos_x - t2.pos_x,2)
+             + power(t1.pos_y - t2.pos_y,2)
+             + power(t1.pos_z - t2.pos_z,2) ) AS dist
+  FROM telemetry_event t1
+  JOIN telemetry_event t2
+    ON t1.game_id = t2.game_id
+   AND t1.player_id < t2.player_id
+   AND t2.tic BETWEEN t1.tic-1 AND t1.tic+1
+)
+SELECT game_id, p_a, p_b,
+       AVG(dist)::numeric(12,2) AS avg_distance,
+       COUNT(*) FILTER (WHERE dist <= 256) AS close_tics
+FROM pairs
+GROUP BY game_id, p_a, p_b
+ORDER BY close_tics DESC, avg_distance ASC
+LIMIT 20;
